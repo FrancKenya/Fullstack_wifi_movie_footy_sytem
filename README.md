@@ -37,5 +37,9 @@ The platform will be web-based and built with Django. The backend is designed to
 
 ---
 ## Developers
-Backend - Francis Waihiga
-Frontend - Benard
+### 📜 Generate AUTHORS File
+
+Run the following script to auto-populate or update the `AUTHORS` file
+
+```bash
+bash scripts/generate-authors.sh
