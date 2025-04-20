@@ -1,0 +1,30 @@
+# === OS-related junk ===
+*~
+*.swp
+*.swo
+
+# === Editor/project settings ===
+.vscode/
+
+# === Python-related ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env/
+venv/
+.envrc
+.mypy_cache/
+.pytest_cache/
+
+# === Node.js (if applicable) ===
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# === Logs ===
+*.log
+
+# === Environment ===
+.env
+.env.*
+
