@@ -43,3 +43,5 @@ Run the following script to auto-populate or update the `AUTHORS` file
 
 ```bash
 bash scripts/generate-authors.sh
+
+📘 See [SETUP.md](./SETUP.md) for full environment configuration instructions.
