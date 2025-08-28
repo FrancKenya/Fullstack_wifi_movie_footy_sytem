@@ -1,24 +1,33 @@
 from django.db import models
 from django.utils import timezone
+from django.core.validators import MinValueValidator
 
 class Package(models.Model):
     """
     Package model
     """
-    name = models.CharField(max_length=100)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    duration = models.PositiveIntegerField()
-    bandwidth_limit = models.CharField(max_length=50, blank=True)
-    max_device = models.PositiveIntegerField(default=1)
-    active = models.BooleanField(default=True)
+    name = models.CharField(max_length=100, unique=True)
+    price = models.DecimalField(max_digits=6, decimal_places=2)
+    duration_value = models.PositiveIntegerField() # package duration value e.g 30
+    duration_unit = models.CharField(max_length=10,
+                                     choices=[(
+                                         "MINUTES", "Minutes"),
+                                         ("HOURS", "Hours"), ("DAYS", "Days"),
+                                         ("MONTHS", "Months")])  # Package duration unit e.g MINUTES, Hours
+    max_devices = models.PositiveSmallIntegerField(default=1,
+                                                   validators=[MinValueValidator(1)])
+    active = models.BooleanField(default=True)  # Available to purchase
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        indexes = [models.Index(fields=['active'])]
+        indexes = [models.Index(fields=['active'])]  # Display active packages on captive portal
 
     def __str__(self):
-        return f"{self.name} - KES {self.price} / {self.duration} min"
+        """
+        Package string representation
+        """
+        return f"{self.name} - KES {self.price} / {self.duration_value} {self.duration_unit.lower()}"
 
 class SessionStatus(models.TextChoices):
     """
