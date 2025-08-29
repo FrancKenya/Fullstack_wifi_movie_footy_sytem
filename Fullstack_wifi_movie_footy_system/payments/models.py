@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from django.core.validators import MinValueValidator
+from datetime import timedelta
 
 class Package(models.Model):
     """
@@ -19,6 +20,30 @@ class Package(models.Model):
     active = models.BooleanField(default=True)  # Available to purchase
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def calculate_expiry(self, start_time):
+        """
+        Calculates the expiry time for the package duration based on the start time
+        Months treated as 30 days fixed period not calendar relatd since time of transaction
+        """
+        # Mapping the duration unit to a timedelta argument and multiplier
+        unit_map = {
+            "MINUTES": ("minutes", 1),
+            "HOURS": ("hours", 1),
+            "DAYS": ("days", 1),
+            "MONTHS": ("months", 30),
+        }
+        # Handle invalid duration units by raising a value error
+        if self.duration_unit not in unit_map:
+            raise ValueError(f"Invalid duration unit: {self.duration_unit}")
+
+        unit, multiplier = unit_map[self.duration_unit]
+        duration_in_units = self.duration_value * multiplier
+
+        # create the timedelta
+        delta_args = {unit: duration_in_units}
+        return start_time + timedelta(**delta_args)
+
 
     class Meta:
         indexes = [models.Index(fields=['active'])]  # Display active packages on captive portal
@@ -76,16 +101,32 @@ class UserSession(models.Model):
         ]
 
 
-class Payment(models.Model):
+class Transaction(models.Model):
     """
-    Payment model
+    Transaction model
     """
-    session = models.ForeignKey(UserSession, on_delete=models.CASCADE, related_name="payments")
-    msisdn = models.CharField(max_length=15)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
-    checkout_request_id = models.CharField(max_length=100, blank=True, null=True, unique=True)
+    package = models.ForeignKey(
+        Package, on_delete=models.PROTECT, related_name="transactions")  # Link to the package model
+    # Client Identification using device MAC address
+    mac_address = models.CharField(max_length=17)
     mpesa_receipt = models.CharField(max_length=30, blank=True, null=True)
-    raw_payload = models.JSONField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
+    # When payment was initiated
+    initiated_at = models.DateTimeField(auto_now_add=True)
+    paid_at = models.DateTimeField(blank=True, null=True) # Time of payment confirmation
+
+    expiry_time = models.DateTimeField(null=True, blank=True) # Time of package expiry calculated after payment confirmation
+    is_successful = models.BooleanField(default=False) # Payment status
+
+    def save(self, *args, **kwargs):
+        """Calculate and save expire only after payment is confirmed method"""
+        if self.is_successful and not self.expiry_time:
+            start_time = self.paid_at or timezone.now()
+            self.expiry_time = self.package.calculate_expiry(start_time)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        """
+        Transaction string representation
+        """
+        return f"{self.mac_address} - {self.package.name} ({'Success' if self.is_successful else 'Pending'})"
