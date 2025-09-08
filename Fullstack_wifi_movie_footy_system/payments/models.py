@@ -41,8 +41,8 @@ class Package(models.Model):
         duration_in_units = self.duration_value * multiplier
 
         # create the timedelta
-        delta_args = {unit: duration_in_units}
-        return start_time + timedelta(**delta_args)
+        delta_args = {unit: duration_in_units}  # Create a dictionary of the timedelta arguments
+        return start_time + timedelta(**delta_args)  # return the expiry time
 
 
     class Meta:
@@ -120,7 +120,7 @@ class Transaction(models.Model):
 
     def save(self, *args, **kwargs):
         """Calculate and save expire only after payment is confirmed method"""
-        if self.is_successful and not self.expiry_time:
+        if self.is_successful and not self.expiry_time:  # Only calculate expiry if payment is successful
             start_time = self.paid_at or timezone.now()
             self.expiry_time = self.package.calculate_expiry(start_time)
         super().save(*args, **kwargs)
