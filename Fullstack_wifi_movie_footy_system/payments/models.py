@@ -54,51 +54,6 @@ class Package(models.Model):
         """
         return f"{self.name} - KES {self.price} / {self.duration_value} {self.duration_unit.lower()}"
 
-class SessionStatus(models.TextChoices):
-    """
-    Session status choices
-    """
-    PENDING = "PENDING", "Pending"
-    PAID = "PAID", "Paid"
-    ACTIVE = "ACTIVE", "Active"
-    EXPIRED = "EXPIRED", "Expired"
-    FAILED = "FAILED", "Failed"
-
-class PaymentStatus(models.TextChoices):
-    """
-    Payment status choices
-    """
-    PENDING = "PENDING", "Pending"
-    SUCCESS = "SUCCESS", "Success"
-    FAILED = "FAILED", "Failed"
-
-class UserSession(models.Model):
-    """
-    User session model
-    """
-    package = models.ForeignKey(
-        Package, on_delete=models.PROTECT, related_name="sessions")
-    msisdn = models.CharField(max_length=15) # Clients phone number
-    mac_address = models.CharField(max_length=17, blank=True, null=True)
-    status = models.CharField(
-        max_length=10, choices=SessionStatus.choices, default=SessionStatus.PENDING)
-    checkout_request_id = models.CharField(max_length=100, blank=True, null=True, unique=True)
-    mpesa_receipt = models.CharField(max_length=30, blank=True, null=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    start_time = models.DateTimeField(blank=True, null=True)
-    expiry_time = models.DateTimeField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-
-    class Meta:
-        """
-        Meta class
-        """
-        indexes = [
-            models.Index(fields=['msisdn']),
-            models.Index(fields=['status']),
-        ]
 
 
 class Transaction(models.Model):
@@ -109,7 +64,7 @@ class Transaction(models.Model):
         Package, on_delete=models.PROTECT, related_name="transactions")  # Link to the package model
     # Client Identification using device MAC address
     mac_address = models.CharField(max_length=17)
-    mpesa_receipt = models.CharField(max_length=30, blank=True, null=True)
+    mpesa_receipt = models.CharField(max_length=30, unique=True, blank=True, null=True)
     amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
     # When payment was initiated
     initiated_at = models.DateTimeField(auto_now_add=True)
@@ -117,6 +72,7 @@ class Transaction(models.Model):
 
     expiry_time = models.DateTimeField(null=True, blank=True) # Time of package expiry calculated after payment confirmation
     is_successful = models.BooleanField(default=False) # Payment status
+    payer_phone = models.CharField(max_length=15, blank=True, null=True)
 
     def save(self, *args, **kwargs):
         """Calculate and save expire only after payment is confirmed method"""
@@ -130,3 +86,40 @@ class Transaction(models.Model):
         Transaction string representation
         """
         return f"{self.mac_address} - {self.package.name} ({'Success' if self.is_successful else 'Pending'})"
+
+
+class UserSession(models.Model):
+    """"
+    Represents an active client session on the network tied to a specific transaction
+    """
+    id = models.AutoField(primary_key=True)
+    transaction = models.ForeignKey(
+        Transaction, on_delete= models.CASCADE, related_name="usersessions")
+    mac_address = models.CharField(max_length=17)
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    def save(self, *args, **kwargs):
+        """ Ensure only one active session per transaction """
+        if self.is_active:
+            UserSession.objects.filter(
+                transaction=self.transaction, is_active=True).exclude(id=self.id).update(is_active=False)
+        super().save(*args, **kwargs)
+
+    class Meta:
+        """
+        UserSession metadata
+        """
+        indexes = [
+            models.Index(fields=['transaction', 'is_active']),
+        ]
+
+
+    def __str__(self):
+        """
+        UserSession string representation
+        """
+        return f"Session for {self.transaction.mpesa_receipt} ({self.mac_address})"
+
