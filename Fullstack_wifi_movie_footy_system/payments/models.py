@@ -87,6 +87,9 @@ class Transaction(models.Model):
         if self.status == 'SUCCESSFUL' and not self.expiry_time:  # Only calculate expiry if payment is successful
             start_time = self.paid_at or timezone.now()
             self.expiry_time = self.package.calculate_expiry(start_time)
+        # if expired mark as expired
+        if self.status == 'SUCCESSFUL' and self.expiry_time and self.expiry_time < timezone.now():
+            self.status = 'EXPIRED'
         super().save(*args, **kwargs)
 
 
@@ -119,12 +122,36 @@ class UserSession(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
 
+
     def save(self, *args, **kwargs):
-        """ Ensure only one active session per transaction """
-        if self.is_active:
+        """ Check if transaction is expired before saving session """
+        if self.transaction.status == 'SUCCESSFUL' and self.transaction.expiry_time < timezone.now(): #
+            # mark that transaction as expired
+            self.transaction.status = 'EXPIRED'
+            self.transaction.save(update_fields=['status'])
+
+            # End that session ASAP
+            self.is_active = False
+            self.updated_at = timezone.now()
+        else:
+            # Ensure only 1 active session per transaction
             UserSession.objects.filter(
                 transaction=self.transaction, is_active=True).exclude(id=self.id).update(is_active=False)
         super().save(*args, **kwargs)
+
+    def is_session_valid(self):
+        """Validate if session is still usable"""
+        if not self.is_active:
+            return False
+        if self.transaction.expiry_time < timezone.now():
+            # Expire session + transaction
+            self.is_active = False
+            self.updated_at = timezone.now()
+            self.transaction.status = 'EXPIRED'
+            self.transaction.save(update_fields=['status'])
+            self.save(update_fields=['is_active', 'updated_at'])
+            return False
+        return True
 
     class Meta:
         """
