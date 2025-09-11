@@ -60,6 +60,13 @@ class Transaction(models.Model):
     """
     Transaction model
     """
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('SUCCESSFUL', 'Successful'),
+        ('FAILED', 'Failed'),
+        ('EXPIRED', 'Expired')
+
+    ]
     package = models.ForeignKey(
         Package, on_delete=models.PROTECT, related_name="transactions")  # Link to the package model
     # Client Identification using device MAC address
@@ -71,22 +78,33 @@ class Transaction(models.Model):
     paid_at = models.DateTimeField(blank=True, null=True) # Time of payment confirmation
 
     expiry_time = models.DateTimeField(null=True, blank=True) # Time of package expiry calculated after payment confirmation
-    is_successful = models.BooleanField(default=False) # Payment status
     payer_phone = models.CharField(max_length=15, blank=True, null=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
+    failure_reason = models.TextField(blank=True, null=True)
 
     def save(self, *args, **kwargs):
         """Calculate and save expire only after payment is confirmed method"""
-        if self.is_successful and not self.expiry_time:  # Only calculate expiry if payment is successful
+        if self.status == 'SUCCESSFUL' and not self.expiry_time:  # Only calculate expiry if payment is successful
             start_time = self.paid_at or timezone.now()
             self.expiry_time = self.package.calculate_expiry(start_time)
         super().save(*args, **kwargs)
+
+
+    class Meta:
+        """
+        Transaction metadata
+        """
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['mpesa_receipt']),
+        ]
+
 
     def __str__(self):
         """
         Transaction string representation
         """
-        return f"{self.mac_address} - {self.package.name} ({'Success' if self.is_successful else 'Pending'})"
-
+        return f"{self.mac_address} - {self.package.name} ({self.status})"
 
 class UserSession(models.Model):
     """"
@@ -114,6 +132,7 @@ class UserSession(models.Model):
         """
         indexes = [
             models.Index(fields=['transaction', 'is_active']),
+            models.Index(fields=['mac_address', 'is_active']),
         ]
 
 
